@@ -19,6 +19,7 @@ var app = cli.New("ghsync", version, build, "GitHub metadata sync")
 func main() {
 	app.AddCommand(&subcmd.ShallowCommand{})
 	app.AddCommand(&subcmd.DeepCommand{})
+	app.AddCommand(&subcmd.CommentsCommand{})
 	app.AddCommand(&subcmd.MigrateCommand{})
 
 	app.RunMain()
