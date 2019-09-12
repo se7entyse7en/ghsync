@@ -72,7 +72,7 @@ func (c *CommentsCommand) getIssueCommentsForRepo(logger log.Logger, db *sql.DB,
 	logger = logger.With(log.Fields{"repo": repo})
 
 	logger.Infof("getting all issues numbers for repo")
-	issueNumbers, err := c.getIssuesNumbers(db)
+	issueNumbers, err := c.getIssuesNumbersForRepo(db, owner, repo)
 	if err != nil {
 		return err
 	}
@@ -158,13 +158,17 @@ func (c *CommentsCommand) getRepositories(db *sql.DB) ([]string, error) {
 	return names, nil
 }
 
-func (c *CommentsCommand) getIssuesNumbers(db *sql.DB) ([]int, error) {
+func (c *CommentsCommand) getIssuesNumbersForRepo(db *sql.DB, owner string, repo string) ([]int, error) {
 	prsStore := models.NewPullRequestStore(db)
 	issuesStore := models.NewIssueStore(db)
 
 	var numbers []int
 
-	prsRecords, err := prsStore.Find(models.NewPullRequestQuery())
+	prsRecords, err := prsStore.Find(models.NewPullRequestQuery().
+		Where(kallax.And(
+			kallax.Eq(models.Schema.PullRequest.RepositoryOwner, owner),
+			kallax.Eq(models.Schema.PullRequest.RepositoryName, repo),
+		)))
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +182,11 @@ func (c *CommentsCommand) getIssuesNumbers(db *sql.DB) ([]int, error) {
 		numbers = append(numbers, *pr.Number)
 	}
 
-	issuesRecords, err := issuesStore.Find(models.NewIssueQuery())
+	issuesRecords, err := issuesStore.Find(models.NewIssueQuery().
+		Where(kallax.And(
+			kallax.Eq(models.Schema.Issue.RepositoryOwner, owner),
+			kallax.Eq(models.Schema.Issue.RepositoryName, repo),
+		)))
 	if err != nil {
 		return nil, err
 	}
