@@ -3,6 +3,7 @@ package subcmd
 import (
 	"context"
 	"database/sql"
+	"strings"
 
 	"github.com/google/go-github/github"
 	"github.com/src-d/ghsync/models"
@@ -14,12 +15,12 @@ import (
 type CommentsCommand struct {
 	cli.Command `name:"comments" short-description:"Deep sync issue comments from GitHub data" long-description:"Deep sync issue comments from GitHub data"`
 
-	Token string `long:"token" env:"GHSYNC_TOKEN" description:"GitHub personal access token" required:"true"`
-	Org   string `long:"org" env:"GHSYNC_ORG" description:"Name of the GitHub organization" required:"true"`
+	Tokens string `long:"tokens" env:"GHSYNC_TOKENS" description:"GitHub personal access tokens comma separated" required:"true"`
+	Org    string `long:"org" env:"GHSYNC_ORG" description:"Name of the GitHub organization" required:"true"`
 
 	Postgres PostgresOpt `group:"PostgreSQL connection options"`
 
-	client *github.Client
+	client *WrapperClient
 	store  *models.IssueCommentStore
 }
 
@@ -30,7 +31,8 @@ func (c *CommentsCommand) Execute(args []string) error {
 	}
 	defer db.Close()
 
-	client, err := newClient(c.Token)
+	tokens := strings.Split(c.Tokens, ",")
+	client, err := newWrapperClient(tokens)
 	if err != nil {
 		return err
 	}
@@ -92,13 +94,19 @@ func (c *CommentsCommand) getIssueCommentsForRepo(logger log.Logger, db *sql.DB,
 		for {
 			logger.Infof("[page %d] fetching comments from api", page)
 			logger.With(log.Fields{"page": page})
-			comments, r, err := c.client.Issues.ListComments(
-				context.TODO(), owner, repo, number, opts)
+
+			resource, r, err := c.client.Request(
+				func(c *github.Client) (interface{}, *github.Response, error) {
+					return c.Issues.ListComments(
+						context.TODO(), owner, repo, number, opts)
+				})
+
 			if err != nil {
 				logger.Errorf(err, "api error, skipping next pages")
 				break
 			}
 
+			comments := resource.([]*github.IssueComment)
 			totalComments := len(comments)
 			logger.Infof("found %d comments", totalComments)
 			for _, comment := range comments {
