@@ -15,8 +15,9 @@ import (
 type CommentsCommand struct {
 	cli.Command `name:"comments" short-description:"Deep sync issue comments from GitHub data" long-description:"Deep sync issue comments from GitHub data"`
 
-	Tokens string `long:"tokens" env:"GHSYNC_TOKENS" description:"GitHub personal access tokens comma separated" required:"true"`
-	Org    string `long:"org" env:"GHSYNC_ORG" description:"Name of the GitHub organization" required:"true"`
+	Tokens        string `long:"tokens" env:"GHSYNC_TOKENS" description:"GitHub personal access tokens comma separated" required:"true"`
+	Org           string `long:"org" env:"GHSYNC_ORG" description:"Name of the GitHub organization" required:"true"`
+	ExcludedRepos string `long:"excluded-repos" env:"GHSYNC_EXCLUDED_REPOS" description:"Excluded repos from sync comma separated"`
 
 	Postgres PostgresOpt `group:"PostgreSQL connection options"`
 
@@ -37,21 +38,24 @@ func (c *CommentsCommand) Execute(args []string) error {
 		return err
 	}
 
+	excludedRepos := strings.Split(c.ExcludedRepos, ",")
+
 	c.client = client
 	c.store = models.NewIssueCommentStore(db)
 
 	logger := log.New(log.Fields{"owner": c.Org})
 
-	if err := c.getAllIssuesComments(logger, db, c.Org); err != nil {
+	if err := c.getAllIssuesComments(logger, db, c.Org, excludedRepos); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (c *CommentsCommand) getAllIssuesComments(logger log.Logger, db *sql.DB, owner string) error {
+func (c *CommentsCommand) getAllIssuesComments(logger log.Logger, db *sql.DB, owner string, excludedRepos []string) error {
 	logger.Infof("getting all issues comments")
-	repos, err := c.getRepositories(db)
+	logger.Infof("excluding %d repos: %v", len(excludedRepos), excludedRepos)
+	repos, err := c.getRepositories(db, excludedRepos)
 	if err != nil {
 		return err
 	}
@@ -145,10 +149,16 @@ func (c *CommentsCommand) doSync(comment *github.IssueComment) error {
 	return err
 }
 
-func (c *CommentsCommand) getRepositories(db *sql.DB) ([]string, error) {
+func (c *CommentsCommand) getRepositories(db *sql.DB, excluded []string) ([]string, error) {
 	repoStore := models.NewRepositoryStore(db)
 
-	reposRecors, err := repoStore.Find(models.NewRepositoryQuery())
+	excludedRaw := make([]interface{}, len(excluded))
+	for i, v := range excluded {
+		excludedRaw[i] = v
+	}
+
+	reposRecors, err := repoStore.Find(models.NewRepositoryQuery().
+		Where(kallax.Not(kallax.In(models.Schema.Repository.Name, excludedRaw...))))
 	if err != nil {
 		return nil, err
 	}
