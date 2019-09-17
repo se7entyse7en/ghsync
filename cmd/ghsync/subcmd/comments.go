@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-github/github"
 	"github.com/src-d/ghsync/models"
+	"github.com/src-d/ghsync/utils"
 	"gopkg.in/src-d/go-cli.v0"
 	"gopkg.in/src-d/go-kallax.v1"
 	"gopkg.in/src-d/go-log.v1"
@@ -21,7 +22,7 @@ type CommentsCommand struct {
 
 	Postgres PostgresOpt `group:"PostgreSQL connection options"`
 
-	client *WrapperClient
+	client *utils.WrapperClient
 	store  *models.IssueCommentStore
 }
 
@@ -33,7 +34,7 @@ func (c *CommentsCommand) Execute(args []string) error {
 	defer db.Close()
 
 	tokens := strings.Split(c.Tokens, ",")
-	client, err := newWrapperClient(tokens)
+	client, err := utils.NewWrapperClient(tokens)
 	if err != nil {
 		return err
 	}
