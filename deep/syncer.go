@@ -4,13 +4,13 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/google/go-github/github"
+	"github.com/src-d/ghsync/utils"
 	"gopkg.in/src-d/go-log.v1"
 	"gopkg.in/src-d/go-queue.v1"
 )
 
 type Syncer struct {
-	c *github.Client
+	c *utils.WrapperClient
 	q queue.Queue
 
 	Organization       *OrganizationSyncer
@@ -23,7 +23,7 @@ type Syncer struct {
 	PullRequestReview  *PullRequestReviewSyncer
 }
 
-func NewSyncer(db *sql.DB, c *github.Client, q queue.Queue) *Syncer {
+func NewSyncer(db *sql.DB, c *utils.WrapperClient, q queue.Queue) *Syncer {
 	return &Syncer{
 		c: c,
 		q: q,

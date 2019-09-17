@@ -1,7 +1,10 @@
 package subcmd
 
 import (
+	"strings"
+
 	"github.com/src-d/ghsync/deep"
+	"github.com/src-d/ghsync/utils"
 
 	"gopkg.in/src-d/go-cli.v0"
 	"gopkg.in/src-d/go-log.v1"
@@ -13,8 +16,8 @@ import (
 type DeepCommand struct {
 	cli.Command `name:"deep" short-description:"Deep sync of GitHub data" long-description:"Deep sync of GitHub data"`
 
-	Token string `long:"token" env:"GHSYNC_TOKEN" description:"GitHub personal access token" required:"true"`
-	Org   string `long:"org" env:"GHSYNC_ORG" description:"Name of the GitHub organization" required:"true"`
+	Tokens string `long:"tokens" env:"GHSYNC_TOKENS" description:"GitHub personal access tokens comma separated" required:"true"`
+	Org    string `long:"org" env:"GHSYNC_ORG" description:"Name of the GitHub organization" required:"true"`
 
 	QueueOpt struct {
 		Queue  string `long:"queue" env:"GHSYNC_QUEUE" description:"queue name. If it's not set the organization name will be used"`
@@ -31,7 +34,8 @@ func (c *DeepCommand) Execute(args []string) error {
 	}
 	defer db.Close()
 
-	client, err := newClient(c.Token)
+	tokens := strings.Split(c.Tokens, ",")
+	client, err := utils.NewWrapperClient(tokens)
 	if err != nil {
 		return err
 	}

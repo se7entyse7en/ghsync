@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/src-d/ghsync/models"
+	"github.com/src-d/ghsync/utils"
 
 	"github.com/google/go-github/github"
 	"gopkg.in/src-d/go-kallax.v1"
@@ -13,10 +14,10 @@ import (
 
 type IssueCommentsSyncer struct {
 	s *models.IssueCommentStore
-	c *github.Client
+	c *utils.WrapperClient
 }
 
-func NewIssueCommentsSyncer(db *sql.DB, c *github.Client) *IssueCommentsSyncer {
+func NewIssueCommentsSyncer(db *sql.DB, c *utils.WrapperClient) *IssueCommentsSyncer {
 	return &IssueCommentsSyncer{
 		s: models.NewIssueCommentStore(db),
 		c: c,
@@ -37,10 +38,16 @@ func (s *IssueCommentsSyncer) SyncIssue(owner, repo string, number int) error {
 	})
 
 	for {
-		comments, r, err := s.c.Issues.ListComments(context.TODO(), owner, repo, number, opts)
+		resource, r, err := s.c.Request(
+			func(c *github.Client) (interface{}, *github.Response, error) {
+				return c.Issues.ListComments(context.TODO(), owner, repo, number, opts)
+			})
+
 		if err != nil {
 			return err
 		}
+
+		comments := resource.([]*github.IssueComment)
 
 		for _, c := range comments {
 			if err := s.doSync(c); err != nil {
@@ -59,10 +66,16 @@ func (s *IssueCommentsSyncer) SyncIssue(owner, repo string, number int) error {
 }
 
 func (s *IssueCommentsSyncer) Sync(owner string, repo string, commentID int64) error {
-	comment, _, err := s.c.Issues.GetComment(context.TODO(), owner, repo, commentID)
+	resource, _, err := s.c.Request(
+		func(c *github.Client) (interface{}, *github.Response, error) {
+			return c.Issues.GetComment(context.TODO(), owner, repo, commentID)
+		})
+
 	if err != nil {
 		return err
 	}
+
+	comment := resource.(*github.IssueComment)
 
 	return s.doSync(comment)
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/src-d/ghsync/models"
+	"github.com/src-d/ghsync/utils"
 
 	"github.com/google/go-github/github"
 	"gopkg.in/src-d/go-kallax.v1"
@@ -14,10 +15,10 @@ import (
 
 type UserSyncer struct {
 	s *models.UserStore
-	c *github.Client
+	c *utils.WrapperClient
 }
 
-func NewUserSyncer(db *sql.DB, c *github.Client) *UserSyncer {
+func NewUserSyncer(db *sql.DB, c *utils.WrapperClient) *UserSyncer {
 	return &UserSyncer{
 		s: models.NewUserStore(db),
 		c: c,
@@ -32,11 +33,16 @@ func (s *UserSyncer) QueueOrganization(q queue.Queue, org string) error {
 	logger.Infof("starting to publish queue jobs")
 
 	for {
-		users, r, err := s.c.Organizations.ListMembers(context.TODO(), org, opts)
+		resource, r, err := s.c.Request(
+			func(c *github.Client) (interface{}, *github.Response, error) {
+				return c.Organizations.ListMembers(context.TODO(), org, opts)
+			})
+
 		if err != nil {
 			return err
 		}
 
+		users := resource.([]*github.User)
 		for _, u := range users {
 			j, err := NewUserSyncJob(u.GetLogin())
 			if err != nil {
@@ -62,10 +68,16 @@ func (s *UserSyncer) QueueOrganization(q queue.Queue, org string) error {
 }
 
 func (s *UserSyncer) Sync(login string) error {
-	user, _, err := s.c.Users.Get(context.TODO(), login)
+	resource, _, err := s.c.Request(
+		func(c *github.Client) (interface{}, *github.Response, error) {
+			return c.Users.Get(context.TODO(), login)
+		})
+
 	if err != nil {
 		return err
 	}
+
+	user := resource.(*github.User)
 
 	record, err := s.s.FindOne(models.NewUserQuery().
 		Where(kallax.And(

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/src-d/ghsync/models"
+	"github.com/src-d/ghsync/utils"
 
 	"github.com/google/go-github/github"
 	"gopkg.in/src-d/go-kallax.v1"
@@ -14,10 +15,10 @@ import (
 
 type PullRequestSyncer struct {
 	s *models.PullRequestStore
-	c *github.Client
+	c *utils.WrapperClient
 }
 
-func NewPullRequestSyncer(db *sql.DB, c *github.Client) *PullRequestSyncer {
+func NewPullRequestSyncer(db *sql.DB, c *utils.WrapperClient) *PullRequestSyncer {
 	return &PullRequestSyncer{
 		s: models.NewPullRequestStore(db),
 		c: c,
@@ -33,10 +34,16 @@ func (s *PullRequestSyncer) QueueRepository(q queue.Queue, owner, repo string) e
 	logger.Infof("starting to publish queue jobs")
 
 	for {
-		requests, r, err := s.c.PullRequests.List(context.TODO(), owner, repo, opts)
+		resource, r, err := s.c.Request(
+			func(c *github.Client) (interface{}, *github.Response, error) {
+				return c.PullRequests.List(context.TODO(), owner, repo, opts)
+			})
+
 		if err != nil {
 			return err
 		}
+
+		requests := resource.([]*github.PullRequest)
 
 		for _, r := range requests {
 			j, err := NewPullRequestSyncJob(owner, repo, r.GetNumber())
@@ -65,10 +72,16 @@ func (s *PullRequestSyncer) QueueRepository(q queue.Queue, owner, repo string) e
 }
 
 func (s *PullRequestSyncer) Sync(owner string, repo string, number int) error {
-	pr, _, err := s.c.PullRequests.Get(context.TODO(), owner, repo, number)
+	resource, _, err := s.c.Request(
+		func(c *github.Client) (interface{}, *github.Response, error) {
+			return c.PullRequests.Get(context.TODO(), owner, repo, number)
+		})
+
 	if err != nil {
 		return err
 	}
+
+	pr := resource.(*github.PullRequest)
 
 	record, err := s.s.FindOne(models.NewPullRequestQuery().
 		Where(kallax.And(

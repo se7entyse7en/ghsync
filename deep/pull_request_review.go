@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/src-d/ghsync/models"
+	"github.com/src-d/ghsync/utils"
 
 	"github.com/google/go-github/github"
 	"gopkg.in/src-d/go-kallax.v1"
@@ -12,10 +13,10 @@ import (
 
 type PullRequestReviewSyncer struct {
 	s *models.PullRequestReviewStore
-	c *github.Client
+	c *utils.WrapperClient
 }
 
-func NewPullRequestReviewSyncer(db *sql.DB, c *github.Client) *PullRequestReviewSyncer {
+func NewPullRequestReviewSyncer(db *sql.DB, c *utils.WrapperClient) *PullRequestReviewSyncer {
 	return &PullRequestReviewSyncer{
 		s: models.NewPullRequestReviewStore(db),
 		c: c,
@@ -27,10 +28,16 @@ func (s *PullRequestReviewSyncer) SyncPullRequest(owner, repo string, number int
 	opts.PerPage = listOptionsPerPage
 
 	for {
-		reviews, r, err := s.c.PullRequests.ListReviews(context.TODO(), owner, repo, number, opts)
+		resource, r, err := s.c.Request(
+			func(c *github.Client) (interface{}, *github.Response, error) {
+				return c.PullRequests.ListReviews(context.TODO(), owner, repo, number, opts)
+			})
+
 		if err != nil {
 			return err
 		}
+
+		reviews := resource.([]*github.PullRequestReview)
 
 		for _, r := range reviews {
 			if err := s.doSync(r); err != nil {
@@ -49,10 +56,16 @@ func (s *PullRequestReviewSyncer) SyncPullRequest(owner, repo string, number int
 }
 
 func (s *PullRequestReviewSyncer) Sync(owner string, repo string, number int, reviewID int64) error {
-	review, _, err := s.c.PullRequests.GetReview(context.TODO(), owner, repo, number, reviewID)
+	resource, _, err := s.c.Request(
+		func(c *github.Client) (interface{}, *github.Response, error) {
+			return c.PullRequests.GetReview(context.TODO(), owner, repo, number, reviewID)
+		})
+
 	if err != nil {
 		return err
 	}
+
+	review := resource.(*github.PullRequestReview)
 
 	return s.doSync(review)
 }
